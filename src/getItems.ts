@@ -1,5 +1,5 @@
 import { query } from "./db.js";
-import { WFM_Item, WFM_ItemDetails } from "./types/WFM_Types/index.js";
+import { WFM_Item, WFM_ItemDetails } from "./types/wfm/index.js";
 import { Item } from "./types/db/index.js";
 
 let res_items = await fetch("https://api.warframe.market/v1/items").then(

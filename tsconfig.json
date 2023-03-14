@@ -7,7 +7,7 @@
     "target": "ES2021",
     "noImplicitAny": true,
     "moduleResolution": "nodenext",
-    "sourceMap": true,
+    "sourceMap": false,
     "strict": true,
     "outDir": "dist",
     "baseUrl": ".",
