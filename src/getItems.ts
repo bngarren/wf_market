@@ -1,4 +1,6 @@
 import { query } from "./db.js";
+import { WFM_Item, WFM_ItemDetails } from "./types/WFM_Types/index.js";
+import { Item } from "./types/db/index.js";
 
 let res_items = await fetch("https://api.warframe.market/v1/items").then(
   (response) => {
@@ -10,27 +12,27 @@ let res_items = await fetch("https://api.warframe.market/v1/items").then(
   }
 );
 
-const items = res_items["payload"]["items"];
+const items: WFM_Item[] = res_items["payload"]["items"];
 
 console.log(`There are ${items.length} items.`);
 
+
+// Done getting list of items from WFM
 // sleep before next api request
-await new Promise((resolve) => setTimeout(resolve, 1000));
+await new Promise((resolve) => setTimeout(resolve, 500));
 
 let counter = 0;
 let max_requests = 9999;
 
 while (counter < max_requests) {
-  const db_item = {
-    id: null,
-    url_name: "",
-    name: "",
-    wiki_link: "",
-  };
+  /**
+   * Item to be inserted into the database
+   */
+  const db_item: Partial<Item> = {};
 
   const item = items[counter + 0];
 
-  // get item info
+  // Get Item details from WFM
   const item_url = `https://api.warframe.market/v1/items/${item["url_name"]}`;
 
   const item_details_res = await fetch(item_url).then((response) => {
@@ -41,24 +43,23 @@ while (counter < max_requests) {
     return response.json();
   });
 
-  const item_details_obj = item_details_res["payload"]["item"];
+  const item_details_obj: WFM_ItemDetails = item_details_res["payload"]["item"];
 
-  // DEBUG
+  // !DEBUG
   console.log(item_details_obj);
 
   const items_in_set = item_details_obj["items_in_set"];
 
-  let item_details = items_in_set.filter(
+  // "Our item" is somewhere within the "items_in_set" array that is returned
+  let item_details = items_in_set.find(
     (i) => i["id"] === item_details_obj["id"]
   );
 
-  if (item_details.length !== 1) {
+  if (!item_details) {
     throw new Error("Problem finding item in set");
   }
 
-  item_details = item_details[0];
-
-  // DEBUG
+  // !DEBUG
   console.log(item_details["tags"]);
 
   const item_tags = item_details["tags"];
@@ -88,8 +89,7 @@ while (counter < max_requests) {
   db_item["riven"] = item_tags.includes("riven_mod");
   db_item["misc"] = item_tags.includes("misc") || item_tags.includes("scene");
 
-  // need lens, riven_mod, misc (scene, misc)
-
+  // Do the database insert operation
   const query_res = await query(
     `INSERT INTO items(
       id, url_name, name, wiki_link, component, set, prime, ducats,
@@ -129,29 +129,3 @@ while (counter < max_requests) {
   // sleep before next api request
   await new Promise((resolve) => setTimeout(resolve, 500));
 }
-
-/* let res = await fetch("https://api.warframe.market/v1/items/eidolon_vazarin_lens/orders").then((response) => {
-    if(!response.ok) {
-        throw new Error(`HTTP error: ${response.status}`)
-    }
-
-    return response.json()
-})
-
-let orders = res["payload"]["orders"]
-
-orders = orders.filter(order => {
-    return order["order_type"] === "sell" && order["user"]["status"] === "ingame"
-})
-
-const prices = []
-
-orders.forEach(order => {
-    for (let i=0; i<order.quantity; i++) {
-        prices.push(order["platinum"])
-    }
-})
-
-prices.sort((a, b) => (a - b));
-
-console.log(prices) */
