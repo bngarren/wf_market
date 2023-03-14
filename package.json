@@ -1,0 +1,20 @@
+{
+  "name": "wf-market",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Ben Garren",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "lodash-es": "^4.17.21",
+    "mathjs": "^11.6.0",
+    "pg": "^8.10.0"
+  },
+  "devDependencies": {
+    "typescript": "^4.9.5"
+  }
+}
