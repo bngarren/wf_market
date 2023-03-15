@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsc",
     "getItems": "node dist/getItems.js",
-    "postinstall": "npm run build"
+    "getPrices": "node dist/getPrices.js",
+    "heroku-postbuild": "npm run build"
   },
   "author": "Ben Garren",
   "license": "ISC",

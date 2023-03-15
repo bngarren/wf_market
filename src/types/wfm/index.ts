@@ -20,3 +20,17 @@ export type WFM_ItemDetails = {
         }
     }[]
 };
+
+export type WFM_ItemOrder = {
+    id: string,
+    platinum: number,
+    quantity: number,
+    order_type: "sell" | "buy",
+    creation_date: "string",
+    user: {
+        id: string,
+        status: string,
+
+    }
+    mod_rank?: number
+}

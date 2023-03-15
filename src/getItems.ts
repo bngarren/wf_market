@@ -24,13 +24,13 @@ await new Promise((resolve) => setTimeout(resolve, 500));
 let counter = 0;
 let max_requests = 9999;
 
-while (counter < max_requests) {
+while (counter < Math.min(items.length, max_requests)) {
   /**
    * Item to be inserted into the database
    */
   const db_item: Partial<Item> = {};
 
-  const item = items[counter + 0];
+  const item = items[counter];
 
   // Get Item details from WFM
   const item_url = `https://api.warframe.market/v1/items/${item["url_name"]}`;

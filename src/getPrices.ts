@@ -1,5 +1,5 @@
-// @ts-nocheck
-import { WFM_Item } from "./types/wfm/index.js"
+import { ItemOrderData } from "./types/db/index.js";
+import { WFM_Item, WFM_ItemOrder } from "./types/wfm/index.js";
 import { query } from "./db.js";
 import { mean, median, std, min, max } from "mathjs";
 import { groupBy, some, take } from "lodash-es";
@@ -34,7 +34,7 @@ while (counter < Math.min(db_items.length, max_requests)) {
     return response.json();
   });
 
-  const item_orders_obj = item_orders_res["payload"]["orders"];
+  const item_orders_obj: WFM_ItemOrder[] = item_orders_res["payload"]["orders"];
 
   // only sell orders and only ingame users
   const item_sell_orders = item_orders_obj.filter(
@@ -44,7 +44,7 @@ while (counter < Math.min(db_items.length, max_requests)) {
   // check if any orders exist
   if (item_sell_orders.length === 0) {
     // If no orders, just update the database with null's mostly
-    updateDatabase(currentItemId, currentItemUrl);
+    updateDatabase({ item_id: currentItemId, item_url_name: currentItemUrl });
   } else {
     // If order includes a "mod_rank" property, we need to group
     // on this to have more accurate price data
@@ -60,22 +60,26 @@ while (counter < Math.min(db_items.length, max_requests)) {
       for (const [rank, rank_orders] of Object.entries(
         grouped_item_sell_orders
       )) {
+        if (!rank) {
+          throw new Error("missing mod_rank");
+        }
+
         console.log(`Mod_rank = ${rank}`);
         const stats = getStatistics(rank_orders);
-        updateDatabase(
-          currentItemId,
-          currentItemUrl,
-          stats.number_of_sellers,
-          stats.quantity_available,
-          stats.mean_price,
-          stats.median_price,
-          stats.stddev_price,
-          stats.min_price,
-          stats.max_price,
-          stats.avg_listed_time,
-          stats.avg_listed_time_new_3,
-          Number(rank)
-        );
+        updateDatabase({
+          item_id: currentItemId,
+          item_url_name: currentItemUrl,
+          number_of_sellers: stats.number_of_sellers,
+          quantity_available: stats.quantity_available,
+          mean_price: stats.mean_price,
+          median_price: stats.median_price,
+          stddev_price: stats.stddev_price,
+          min_price: stats.min_price,
+          max_price: stats.max_price,
+          avg_listed_time: stats.avg_listed_time,
+          avg_listed_time_new_3: stats.avg_listed_time_new_3,
+          rank: Number(rank),
+        });
 
         // sleep before next api request
         await new Promise((resolve) => setTimeout(resolve, 250));
@@ -85,19 +89,19 @@ while (counter < Math.min(db_items.length, max_requests)) {
 
       const stats = getStatistics(item_sell_orders);
 
-      updateDatabase(
-        currentItemId,
-        currentItemUrl,
-        stats.number_of_sellers,
-        stats.quantity_available,
-        stats.mean_price,
-        stats.median_price,
-        stats.stddev_price,
-        stats.min_price,
-        stats.max_price,
-        stats.avg_listed_time,
-        stats.avg_listed_time_new_3
-      );
+      updateDatabase({
+        item_id: currentItemId,
+        item_url_name: currentItemUrl,
+        number_of_sellers: stats.number_of_sellers,
+        quantity_available: stats.quantity_available,
+        mean_price: stats.mean_price,
+        median_price: stats.median_price,
+        stddev_price: stats.stddev_price,
+        min_price: stats.min_price,
+        max_price: stats.max_price,
+        avg_listed_time: stats.avg_listed_time,
+        avg_listed_time_new_3: stats.avg_listed_time_new_3,
+      });
     }
   }
 
@@ -107,22 +111,22 @@ while (counter < Math.min(db_items.length, max_requests)) {
   await new Promise((resolve) => setTimeout(resolve, 500));
 }
 
-function getStatistics(ordersArray) {
+function getStatistics(ordersArray: WFM_ItemOrder[]) {
   // Statistics
   let raw_number_of_sellers = 0;
   let raw_quantity_available = 0;
-  const raw_distribution = [];
+  const raw_distribution: number[] = [];
   let number_of_sellers = 0;
   let quantity_available = 0;
-  const distribution = [];
-  let mean_price = null;
-  let median_price = null;
-  let stddev_price = null;
-  let min_price = null;
-  let max_price = null;
-  const since_created = [];
-  let avg_listed_time = null;
-  let avg_listed_time_new_3 = null;
+  const distribution: number[] = [];
+  let mean_price: number | null = null;
+  let median_price: number | null = null;
+  let stddev_price: number | null = null;
+  let min_price: number | null = null;
+  let max_price: number | null = null;
+  const since_created: number[] = [];
+  let avg_listed_time: number | null = null;
+  let avg_listed_time_new_3: number | null = null;
 
   // Get raw distribution
   ordersArray.forEach((seller) => {
@@ -142,8 +146,8 @@ function getStatistics(ordersArray) {
 
   if (raw_distribution.length > 0) {
     mean_price = mean(raw_distribution).toFixed(2);
-    median_price = median(raw_distribution).toFixed(2);
-    stddev_price = std(raw_distribution).toFixed(2);
+    median_price = Number(median(raw_distribution).toFixed(2));
+    stddev_price = getStd(raw_distribution)
     min_price = min(raw_distribution);
     max_price = max(raw_distribution);
   }
@@ -180,8 +184,8 @@ function getStatistics(ordersArray) {
 
   if (distribution.length > 0) {
     mean_price = mean(distribution).toFixed(2);
-    median_price = median(distribution).toFixed(2);
-    stddev_price = std(distribution).toFixed(2);
+    median_price = Number(median(distribution).toFixed(2));
+    stddev_price = getStd(distribution)
     min_price = min(distribution);
     max_price = max(distribution);
     avg_listed_time = mean(since_created).toFixed(2);
@@ -221,9 +225,9 @@ function getStatistics(ordersArray) {
   };
 }
 
-async function updateDatabase(
-  itemId,
-  itemUrlName,
+async function updateDatabase({
+  item_id,
+  item_url_name,
   number_of_sellers = 0,
   quantity_available = 0,
   mean_price = null,
@@ -233,14 +237,14 @@ async function updateDatabase(
   max_price = null,
   avg_listed_time = null,
   avg_listed_time_new_3 = null,
-  rank = null
-) {
+  rank = null,
+}: Partial<ItemOrderData>) {
   // Add to database
   const query_insert = await query(
     "INSERT INTO item_sell_data(item_id, date, item_url_name, number_of_sellers, quantity_available, mean_price, median_price, stddev_price, min_price, max_price, avg_listed_time, avg_listed_time_new_3, rank) VALUES ($1, CURRENT_TIMESTAMP, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING date",
     [
-      itemId,
-      itemUrlName,
+      item_id,
+      item_url_name,
       number_of_sellers,
       quantity_available,
       mean_price,
@@ -261,13 +265,19 @@ async function updateDatabase(
   // Update item in database to show last scrape and ++number of scrapes
   await query(
     "UPDATE items SET last_scrape = $1, number_of_scrapes = number_of_scrapes + 1 WHERE id = $2",
-    [inserted_date, itemId]
+    [inserted_date, item_id]
   );
 }
 
-function getHoursOld(date) {
-  const created_time = new Date(date);
-  const now = new Date();
+function getStd(arr: number[]) {
+  const res = std(arr);
+  // @ts-ignore
+  return Number(res.toFixed(2))
+}
+
+function getHoursOld(date: string) {
+  const created_time = new Date(date).getTime();
+  const now = new Date().getTime();
   const diffTime = Math.abs(now - created_time);
   const diffHours = diffTime / (1000 * 60 * 60);
   return diffHours;
