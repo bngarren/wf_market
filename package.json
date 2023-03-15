@@ -3,9 +3,13 @@
   "version": "1.0.0",
   "description": "",
   "main": "app.js",
+  "engines": {
+    "node": "19.7.0"
+  },
   "scripts": {
     "build": "tsc",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "getItems": "node dist/getItems.js",
+    "postinstall": "npm run build"
   },
   "author": "Ben Garren",
   "license": "ISC",
@@ -17,6 +21,7 @@
     "pg": "^8.10.0"
   },
   "devDependencies": {
+    "@types/lodash-es": "^4.17.7",
     "@types/node": "^18.15.3",
     "typescript": "^4.9.5"
   }

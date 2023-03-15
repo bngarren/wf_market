@@ -1,3 +1,5 @@
+// @ts-nocheck
+import { WFM_Item } from "./types/wfm/index.js"
 import { query } from "./db.js";
 import { mean, median, std, min, max } from "mathjs";
 import { groupBy, some, take } from "lodash-es";
@@ -8,16 +10,18 @@ const query_items = await query(
   "SELECT id, url_name, last_scrape FROM items ORDER BY last_scrape ASC NULLS FIRST"
 );
 
+const db_items: WFM_Item[] = query_items.rows;
+
 let counter = 0;
 let max_requests = 9999;
 
-console.log(`Starting getPrices for ${query_items.rows.length} items.`);
+console.log(`Starting getPrices for ${db_items.length} items.`);
 
-while (counter < Math.min(query_items.rows.length, max_requests)) {
-  const currentItemId = query_items.rows[counter].id;
-  const currentItemUrl = query_items.rows[counter].url_name;
+while (counter < Math.min(db_items.length, max_requests)) {
+  const currentItemId = db_items[counter].id;
+  const currentItemUrl = db_items[counter].url_name;
 
-  console.log(currentItemUrl);
+  console.log(`#${counter} - ${currentItemUrl}`);
 
   const item_orders_url = `https://api.warframe.market/v1/items/${currentItemUrl}/orders`;
 
