@@ -32,11 +32,13 @@ export type ItemOrderData = {
     quantity_available: number,
     mean_price: number | null,
     median_price: number | null,
-    stddev_price: number | null,
+    std_price: number | null,
     min_price: number | null,
     max_price: number | null,
+    min_3_price_avg: number | null,
     item_url_name: string,
     rank: number | null,
     avg_listed_time: number | null,
+    std_listed_time: number | null,
     avg_listed_time_new_3: number | null
 }

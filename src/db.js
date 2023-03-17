@@ -11,7 +11,6 @@ dotenv.config();
 
 let conObject = {}
 
-console.log(process.env)
 
 if (process.env.NODE_ENV === "development") {
     conObject = {
@@ -28,8 +27,6 @@ if (process.env.NODE_ENV === "development") {
 }
 
 const pool = new Pool(conObject);
-
-console.log(conObject)
 
 export const query = async (text, params) => {
   try {

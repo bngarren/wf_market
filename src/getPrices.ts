@@ -69,16 +69,18 @@ while (counter < Math.min(db_items.length, max_requests)) {
         updateDatabase({
           item_id: currentItemId,
           item_url_name: currentItemUrl,
+          rank: Number(rank),
           number_of_sellers: stats.number_of_sellers,
           quantity_available: stats.quantity_available,
           mean_price: stats.mean_price,
           median_price: stats.median_price,
-          stddev_price: stats.stddev_price,
+          std_price: stats.std_price,
           min_price: stats.min_price,
           max_price: stats.max_price,
+          min_3_price_avg: stats.min_3_price_avg,
           avg_listed_time: stats.avg_listed_time,
+          std_listed_time: stats.std_listed_time,
           avg_listed_time_new_3: stats.avg_listed_time_new_3,
-          rank: Number(rank),
         });
 
         // sleep before next api request
@@ -96,10 +98,12 @@ while (counter < Math.min(db_items.length, max_requests)) {
         quantity_available: stats.quantity_available,
         mean_price: stats.mean_price,
         median_price: stats.median_price,
-        stddev_price: stats.stddev_price,
+        std_price: stats.std_price,
         min_price: stats.min_price,
         max_price: stats.max_price,
+        min_3_price_avg: stats.min_3_price_avg,
         avg_listed_time: stats.avg_listed_time,
+        std_listed_time: stats.std_listed_time,
         avg_listed_time_new_3: stats.avg_listed_time_new_3,
       });
     }
@@ -121,11 +125,14 @@ function getStatistics(ordersArray: WFM_ItemOrder[]) {
   const distribution: number[] = [];
   let mean_price: number | null = null;
   let median_price: number | null = null;
-  let stddev_price: number | null = null;
+  let std_price: number | null = null;
   let min_price: number | null = null;
   let max_price: number | null = null;
   const since_created: number[] = [];
+  let min_3_price_avg: number | null = null;
   let avg_listed_time: number | null = null;
+  let std_listed_time: number | null = null;
+  let skew_listed_time: number | null = null;
   let avg_listed_time_new_3: number | null = null;
 
   // Get raw distribution
@@ -147,7 +154,7 @@ function getStatistics(ordersArray: WFM_ItemOrder[]) {
   if (raw_distribution.length > 0) {
     mean_price = mean(raw_distribution).toFixed(2);
     median_price = Number(median(raw_distribution).toFixed(2));
-    stddev_price = getStd(raw_distribution)
+    std_price = getStd(raw_distribution)
     min_price = min(raw_distribution);
     max_price = max(raw_distribution);
   }
@@ -156,6 +163,7 @@ function getStatistics(ordersArray: WFM_ItemOrder[]) {
   ordersArray.forEach((seller) => {
     const price = seller.platinum;
 
+    // max = 25th percentile
     const maxValue = getMaxValue(raw_distribution);
 
     if (price > maxValue) {
@@ -185,10 +193,12 @@ function getStatistics(ordersArray: WFM_ItemOrder[]) {
   if (distribution.length > 0) {
     mean_price = mean(distribution).toFixed(2);
     median_price = Number(median(distribution).toFixed(2));
-    stddev_price = getStd(distribution)
+    std_price = getStd(distribution)
     min_price = min(distribution);
     max_price = max(distribution);
+    min_3_price_avg = mean([...new Set(distribution)].sort((a, b) => a - b).slice(0,3)) // only unique prices
     avg_listed_time = mean(since_created).toFixed(2);
+    std_listed_time = getStd(since_created);
     avg_listed_time_new_3 = mean(
       take(
         since_created.sort((a, b) => a - b),
@@ -204,10 +214,13 @@ function getStatistics(ordersArray: WFM_ItemOrder[]) {
     Distribution (filtered) = ${distribution}
     Mean (filtered) = ${mean_price}
     Median (filtered) = ${median_price}
-    Std (filtered) = ${stddev_price}
+    Std (filtered) = ${std_price}
     Min (filtered) = ${min_price}
     Max (filtered) = ${max_price}
+    Min 3 Avg (filtered) = ${min_3_price_avg}
+    Listed Times (filtered) = ${since_created}
     Avg Listed Time (filtered) = ${avg_listed_time}
+    Std Listed Time (filtered) = ${std_listed_time}
     Avg Listed Time New 3 (filtered) = ${avg_listed_time_new_3}
     `);
   Performance;
@@ -217,10 +230,12 @@ function getStatistics(ordersArray: WFM_ItemOrder[]) {
     quantity_available,
     mean_price,
     median_price,
-    stddev_price,
+    std_price,
     min_price,
     max_price,
+    min_3_price_avg,
     avg_listed_time,
+    std_listed_time,
     avg_listed_time_new_3,
   };
 }
@@ -228,33 +243,37 @@ function getStatistics(ordersArray: WFM_ItemOrder[]) {
 async function updateDatabase({
   item_id,
   item_url_name,
+  rank = null,
   number_of_sellers = 0,
   quantity_available = 0,
   mean_price = null,
   median_price = null,
-  stddev_price = null,
+  std_price = null,
   min_price = null,
   max_price = null,
+  min_3_price_avg = null,
   avg_listed_time = null,
+  std_listed_time = null,
   avg_listed_time_new_3 = null,
-  rank = null,
 }: Partial<ItemOrderData>) {
   // Add to database
   const query_insert = await query(
-    "INSERT INTO item_sell_data(item_id, date, item_url_name, number_of_sellers, quantity_available, mean_price, median_price, stddev_price, min_price, max_price, avg_listed_time, avg_listed_time_new_3, rank) VALUES ($1, CURRENT_TIMESTAMP, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING date",
+    "INSERT INTO item_sell_data(item_id, date, item_url_name, rank, number_of_sellers, quantity_available, mean_price, median_price, std_price, min_price, max_price, min_3_price_avg, avg_listed_time, std_listed_time, avg_listed_time_new_3) VALUES ($1, CURRENT_TIMESTAMP, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING date",
     [
       item_id,
       item_url_name,
+      rank,
       number_of_sellers,
       quantity_available,
       mean_price,
       median_price,
-      stddev_price,
+      std_price,
       min_price,
       max_price,
+      min_3_price_avg,
       avg_listed_time,
+      std_listed_time,
       avg_listed_time_new_3,
-      rank,
     ]
   );
 
