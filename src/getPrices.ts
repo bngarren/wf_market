@@ -196,7 +196,7 @@ function getStatistics(ordersArray: WFM_ItemOrder[]) {
     std_price = getStd(distribution)
     min_price = min(distribution);
     max_price = max(distribution);
-    min_3_price_avg = mean([...new Set(distribution)].sort((a, b) => a - b).slice(0,3)) // only unique prices
+    min_3_price_avg = mean([...new Set(distribution)].sort((a, b) => a - b).slice(0,3)).toFixed(1) // only unique prices
     avg_listed_time = mean(since_created).toFixed(2);
     std_listed_time = getStd(since_created);
     avg_listed_time_new_3 = mean(
