@@ -6,14 +6,14 @@ import { groupBy, some, take } from "lodash-es";
 import { getMaxValue } from "./outliers.js";
 
 // Get items from db
-const query_items = await query(
-  "SELECT id, url_name, last_scrape FROM items ORDER BY last_scrape ASC NULLS FIRST"
-);
+const query_items = await query("SELECT id, url_name, last_scrape FROM items ORDER BY last_scrape ASC NULLS FIRST");
 
 const db_items: WFM_Item[] = query_items.rows;
 
+const startTime = process.hrtime();
 let counter = 0;
-let max_requests = 9999;
+let max_requests = 5;
+let errors: {}[] = [];
 
 console.log(`Starting getPrices for ${db_items.length} items.`);
 
@@ -21,25 +21,30 @@ while (counter < Math.min(db_items.length, max_requests)) {
   const currentItemId = db_items[counter].id;
   const currentItemUrl = db_items[counter].url_name;
 
-  console.log(`#${counter} - ${currentItemUrl}`);
+  console.log(`#${counter + 1} - ${currentItemUrl}`);
 
   const item_orders_url = `https://api.warframe.market/v1/items/${currentItemUrl}/orders`;
 
   // Get orders info for item from WF market
-  const item_orders_res = await fetch(item_orders_url).then((response) => {
-    if (!response.ok) {
-      throw new Error(`HTTP error: ${response.status}`);
-    }
+  const item_orders_res = await fetch(item_orders_url);
 
-    return response.json();
-  });
+  if (!item_orders_res.ok) {
+    console.error(`HTTP error: ${item_orders_res.status}`);
+    errors.push({
+      item_name_url: currentItemUrl,
+      error: item_orders_res.status,
+    });
+    // skip this item
+    continue;
+  }
 
-  const item_orders_obj: WFM_ItemOrder[] = item_orders_res["payload"]["orders"];
+  const item_orders_json = await item_orders_res.json();
+
+  // @ts-ignore
+  const item_orders_obj: WFM_ItemOrder[] = item_orders_json["payload"]["orders"];
 
   // only sell orders and only ingame users
-  const item_sell_orders = item_orders_obj.filter(
-    (i) => i.order_type === "sell" && i.user.status === "ingame"
-  );
+  const item_sell_orders = item_orders_obj.filter((i) => i.order_type === "sell" && i.user.status === "ingame");
 
   // check if any orders exist
   if (item_sell_orders.length === 0) {
@@ -50,16 +55,11 @@ while (counter < Math.min(db_items.length, max_requests)) {
     // on this to have more accurate price data
 
     if (some(item_sell_orders, "mod_rank")) {
-      const grouped_item_sell_orders = groupBy(
-        item_sell_orders,
-        ({ mod_rank }) => mod_rank
-      );
+      const grouped_item_sell_orders = groupBy(item_sell_orders, ({ mod_rank }) => mod_rank);
 
       // console.log(grouped_item_sell_orders);
 
-      for (const [rank, rank_orders] of Object.entries(
-        grouped_item_sell_orders
-      )) {
+      for (const [rank, rank_orders] of Object.entries(grouped_item_sell_orders)) {
         if (!rank) {
           throw new Error("missing mod_rank");
         }
@@ -115,6 +115,17 @@ while (counter < Math.min(db_items.length, max_requests)) {
   await new Promise((resolve) => setTimeout(resolve, 500));
 }
 
+process.on("beforeExit", (code) => {
+  const elapsedTime = Math.floor((process.hrtime()[0] - startTime[0]) / 60);
+  console.log("Process beforeExit event with code: ", code);
+  console.log(`Successfully indexed ${counter - errors.length} items in ${elapsedTime} minutes.`);
+
+  if (errors.length > 0) {
+    console.log(`There were ${errors.length} errors:
+    ${errors}`);
+  }
+});
+
 function getStatistics(ordersArray: WFM_ItemOrder[]) {
   // Statistics
   let raw_number_of_sellers = 0;
@@ -154,7 +165,7 @@ function getStatistics(ordersArray: WFM_ItemOrder[]) {
   if (raw_distribution.length > 0) {
     mean_price = mean(raw_distribution).toFixed(2);
     median_price = Number(median(raw_distribution).toFixed(2));
-    std_price = getStd(raw_distribution)
+    std_price = getStd(raw_distribution);
     min_price = min(raw_distribution);
     max_price = max(raw_distribution);
   }
@@ -193,10 +204,10 @@ function getStatistics(ordersArray: WFM_ItemOrder[]) {
   if (distribution.length > 0) {
     mean_price = mean(distribution).toFixed(2);
     median_price = Number(median(distribution).toFixed(2));
-    std_price = getStd(distribution)
+    std_price = getStd(distribution);
     min_price = min(distribution);
     max_price = max(distribution);
-    min_3_price_avg = mean([...new Set(distribution)].sort((a, b) => a - b).slice(0,3)).toFixed(1) // only unique prices
+    min_3_price_avg = mean([...new Set(distribution)].sort((a, b) => a - b).slice(0, 3)).toFixed(1); // only unique prices
     avg_listed_time = mean(since_created).toFixed(2);
     std_listed_time = getStd(since_created);
     avg_listed_time_new_3 = mean(
@@ -282,16 +293,16 @@ async function updateDatabase({
   console.log(inserted_date);
 
   // Update item in database to show last scrape and ++number of scrapes
-  await query(
-    "UPDATE items SET last_scrape = $1, number_of_scrapes = number_of_scrapes + 1 WHERE id = $2",
-    [inserted_date, item_id]
-  );
+  await query("UPDATE items SET last_scrape = $1, number_of_scrapes = number_of_scrapes + 1 WHERE id = $2", [
+    inserted_date,
+    item_id,
+  ]);
 }
 
 function getStd(arr: number[]) {
   const res = std(arr);
   // @ts-ignore
-  return Number(res.toFixed(2))
+  return Number(res.toFixed(2));
 }
 
 function getHoursOld(date: string) {

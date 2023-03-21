@@ -4,3 +4,15 @@ build
 dist
 .env
 .DS_Store
+.prettierrc*
+.prettierignore
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
