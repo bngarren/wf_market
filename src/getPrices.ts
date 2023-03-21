@@ -12,7 +12,7 @@ const db_items: WFM_Item[] = query_items.rows;
 
 const startTime = process.hrtime();
 let counter = 0;
-let max_requests = 5;
+let max_requests = 9999;
 let errors: {}[] = [];
 
 console.log(`Starting getPrices for ${db_items.length} items.`);
