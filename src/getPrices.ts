@@ -14,27 +14,54 @@ const startTime = process.hrtime();
 let counter = 0;
 let max_requests = 9999;
 let errors: {}[] = [];
+let attempts = 0;
+const maxAttempts = 2;
 
 console.log(`Starting getPrices for ${db_items.length} items.`);
 
 while (counter < Math.min(db_items.length, max_requests)) {
+
   const currentItemId = db_items[counter].id;
   const currentItemUrl = db_items[counter].url_name;
 
-  console.log(`#${counter + 1} - ${currentItemUrl}`);
+  // Keep track of attempts (for allowing retries)
+  attempts++;
+  console.log(`#${counter + 1} - ${currentItemUrl} (attempt ${attempts})`);
+  if (attempts > maxAttempts) {
+    console.error(`Skipped due to max attempts ${maxAttempts}`)
+    counter++;
+    attempts = 0;
+    continue;
+  }
 
   const item_orders_url = `https://api.warframe.market/v1/items/${currentItemUrl}/orders`;
 
   // Get orders info for item from WF market
-  const item_orders_res = await fetch(item_orders_url);
+  let item_orders_res;
 
-  if (!item_orders_res.ok) {
-    console.error(`HTTP error: ${item_orders_res.status}`);
+  // sleep before next api request
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  
+  try {
+    item_orders_res = await fetch(item_orders_url);
+  } catch (err) {
+    console.error(`Fetch error: ${err}`);
     errors.push({
       item_name_url: currentItemUrl,
-      error: item_orders_res.status,
+      error: err,
     });
-    // skip this item
+    // back to while loop
+    continue;
+  }
+
+  if (!item_orders_res.ok) {
+    console.error(`Fetch error: ${item_orders_res.status}`);
+    errors.push({
+      item_name_url: currentItemUrl,
+      status: item_orders_res.status,
+      body: item_orders_res.body,
+    });
+    // back to while loop
     continue;
   }
 
@@ -49,7 +76,7 @@ while (counter < Math.min(db_items.length, max_requests)) {
   // check if any orders exist
   if (item_sell_orders.length === 0) {
     // If no orders, just update the database with null's mostly
-    updateDatabase({ item_id: currentItemId, item_url_name: currentItemUrl });
+    await updateDatabase({ item_id: currentItemId, item_url_name: currentItemUrl });
   } else {
     // If order includes a "mod_rank" property, we need to group
     // on this to have more accurate price data
@@ -66,7 +93,7 @@ while (counter < Math.min(db_items.length, max_requests)) {
 
         console.log(`Mod_rank = ${rank}`);
         const stats = getStatistics(rank_orders);
-        updateDatabase({
+        await updateDatabase({
           item_id: currentItemId,
           item_url_name: currentItemUrl,
           rank: Number(rank),
@@ -82,16 +109,13 @@ while (counter < Math.min(db_items.length, max_requests)) {
           std_listed_time: stats.std_listed_time,
           avg_listed_time_new_3: stats.avg_listed_time_new_3,
         });
-
-        // sleep before next api request
-        await new Promise((resolve) => setTimeout(resolve, 250));
       }
     } else {
       // no mod_rank
 
       const stats = getStatistics(item_sell_orders);
 
-      updateDatabase({
+      await updateDatabase({
         item_id: currentItemId,
         item_url_name: currentItemUrl,
         number_of_sellers: stats.number_of_sellers,
@@ -109,11 +133,18 @@ while (counter < Math.min(db_items.length, max_requests)) {
     }
   }
 
+  console.log(`${counter}/${db_items.length} (${Math.floor(counter / db_items.length *100)}%) complete...`)
+  // next item
   counter++;
-
-  // sleep before next api request
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  // reset attempts as we start next item
+  attempts = 0;
 }
+
+process.on("uncaughtException", (err) => {
+  console.error((new Date).toUTCString() + ' uncaughtException:', err.message)
+  console.error(err.stack)
+  process.exit(1)
+})
 
 process.on("beforeExit", (code) => {
   const elapsedTime = Math.floor((process.hrtime()[0] - startTime[0]) / 60);
@@ -121,7 +152,7 @@ process.on("beforeExit", (code) => {
   console.log(`Successfully indexed ${counter - errors.length} items in ${elapsedTime} minutes.`);
 
   if (errors.length > 0) {
-    console.log(`There were ${errors.length} errors:
+    console.log(`There were ${errors.length} caught errors:
     ${errors}`);
   }
 });
