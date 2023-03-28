@@ -1,21 +1,19 @@
 import { query } from "./db.js";
 import { WFM_Item, WFM_ItemDetails } from "./types/wfm/index.js";
-import { Item } from "./types/db/index.js";
+import { Item, SetComponent } from "./types/db/index.js";
 
-let res_items = await fetch("https://api.warframe.market/v1/items").then(
-  (response) => {
-    if (!response.ok) {
-      throw new Error(`HTTP error: ${response.status}`);
-    }
-
-    return response.json();
+// Get list of items from WF market
+let res_items = await fetch("https://api.warframe.market/v1/items").then((response) => {
+  if (!response.ok) {
+    throw new Error(`HTTP error: ${response.status}`);
   }
-);
+
+  return response.json();
+});
 
 const items: WFM_Item[] = res_items["payload"]["items"];
 
 console.log(`There are ${items.length} items.`);
-
 
 // Done getting list of items from WFM
 // sleep before next api request
@@ -29,6 +27,7 @@ while (counter < Math.min(items.length, max_requests)) {
    * Item to be inserted into the database
    */
   const db_item: Partial<Item> = {};
+  const db_set_component: Partial<SetComponent> = {};
 
   const item = items[counter];
 
@@ -51,12 +50,24 @@ while (counter < Math.min(items.length, max_requests)) {
   const items_in_set = item_details_obj["items_in_set"];
 
   // "Our item" is somewhere within the "items_in_set" array that is returned
-  let item_details = items_in_set.find(
-    (i) => i["id"] === item_details_obj["id"]
-  );
+  let item_details = items_in_set.find((i) => i["id"] === item_details_obj["id"]);
 
   if (!item_details) {
     throw new Error("Problem finding item in set");
+  }
+
+  // If this item is a set root item, e.g. mag_prime_set,
+  // get the set information from "items_in_set"
+  if (items_in_set.length > 1 && item_details["set_root"] === true) {
+    const set_root_id = item_details["id"];
+    // Loop through each non-root item in the set and add it to the db
+    items_in_set.forEach((set_item) => {
+      if (set_item["set_root"] === true) return;
+
+      db_set_component["item_id"] = set_item["id"];
+      db_set_component["set_root_id"] = set_root_id;
+      db_set_component["quantity"] = set_item["quantity_for_set"];
+    });
   }
 
   // !DEBUG
@@ -74,12 +85,9 @@ while (counter < Math.min(items.length, max_requests)) {
   db_item["ducats"] = item_details["ducats"] || 0;
   db_item["blueprint"] = item_tags.includes("blueprint");
   db_item["syndicate"] = item_tags.includes("syndicate");
-  db_item["primary_weapon"] =
-    item_tags.includes("primary") && !item_tags.includes("mod");
-  db_item["secondary_weapon"] =
-    item_tags.includes("secondary") && !item_tags.includes("mod");
-  db_item["melee_weapon"] =
-    item_tags.includes("melee") && !item_tags.includes("mod");
+  db_item["primary_weapon"] = item_tags.includes("primary") && !item_tags.includes("mod");
+  db_item["secondary_weapon"] = item_tags.includes("secondary") && !item_tags.includes("mod");
+  db_item["melee_weapon"] = item_tags.includes("melee") && !item_tags.includes("mod");
   db_item["archwing"] = item_tags.includes("archwing");
   db_item["warframe"] = item_tags.includes("warframe") && db_item["prime"];
   db_item["mod"] = item_tags.includes("mod");
@@ -89,8 +97,8 @@ while (counter < Math.min(items.length, max_requests)) {
   db_item["riven"] = item_tags.includes("riven_mod");
   db_item["misc"] = item_tags.includes("misc") || item_tags.includes("scene");
 
-  // Do the database insert operation
-  const query_res = await query(
+  // Do the database insert operation into 'items' table
+  const query_res1 = await query(
     `INSERT INTO items(
       id, url_name, name, wiki_link, component, set, prime, ducats,
       blueprint, syndicate, primary_weapon, secondary_weapon, melee_weapon,
@@ -123,6 +131,17 @@ while (counter < Math.min(items.length, max_requests)) {
       db_item["misc"],
     ]
   );
+
+  if (db_set_component.hasOwnProperty("item_id")) {
+    const query_res2 = await query(
+      `INSERT INTO set_components(
+        item_id, set_root_id, quantity)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (item_id) DO NOTHING
+        RETURNING *`,
+      [db_set_component["item_id"], db_set_component["set_root_id"], db_set_component["quantity"]]
+    );
+  }
 
   counter++;
 

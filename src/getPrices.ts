@@ -133,9 +133,12 @@ while (counter < Math.min(db_items.length, max_requests)) {
     }
   }
 
-  console.log(`${counter}/${db_items.length} (${Math.floor(counter / db_items.length *100)}%) complete...`)
+
+  console.log(`${counter+1}/${db_items.length} (${Math.floor((counter + 1) / db_items.length *100)}%) complete...`)
+
   // next item
   counter++;
+ 
   // reset attempts as we start next item
   attempts = 0;
 }

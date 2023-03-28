@@ -13,6 +13,7 @@ export type WFM_ItemDetails = {
         tags: string[],
         ducats: number,
         set_root: boolean,
+        quantity_for_set: number,
         en: {
             item_name: string,
             description: string,

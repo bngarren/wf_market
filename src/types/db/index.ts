@@ -42,3 +42,9 @@ export type ItemOrderData = {
     std_listed_time: number | null,
     avg_listed_time_new_3: number | null
 }
+
+export type SetComponent = {
+    item_id: string,
+    set_root_id: string,
+    quantity: number
+}
