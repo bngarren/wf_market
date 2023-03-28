@@ -27,7 +27,6 @@ while (counter < Math.min(items.length, max_requests)) {
    * Item to be inserted into the database
    */
   const db_item: Partial<Item> = {};
-  const db_set_component: Partial<SetComponent> = {};
 
   const item = items[counter];
 
@@ -61,13 +60,26 @@ while (counter < Math.min(items.length, max_requests)) {
   if (items_in_set.length > 1 && item_details["set_root"] === true) {
     const set_root_id = item_details["id"];
     // Loop through each non-root item in the set and add it to the db
-    items_in_set.forEach((set_item) => {
-      if (set_item["set_root"] === true) return;
+    await Promise.all(
+      items_in_set.map(async (set_item) => {
+        if (set_item["set_root"] === true) return;
 
-      db_set_component["item_id"] = set_item["id"];
-      db_set_component["set_root_id"] = set_root_id;
-      db_set_component["quantity"] = set_item["quantity_for_set"];
-    });
+        const db_set_component: Partial<SetComponent> = {};
+
+        db_set_component["item_id"] = set_item["id"];
+        db_set_component["set_root_id"] = set_root_id;
+        db_set_component["quantity"] = set_item["quantity_for_set"];
+
+        const query_res2 = await query(
+          `INSERT INTO set_components(
+          item_id, set_root_id, quantity)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (item_id) DO NOTHING
+          RETURNING *`,
+          [db_set_component["item_id"], db_set_component["set_root_id"], db_set_component["quantity"]]
+        );
+      })
+    );
   }
 
   // !DEBUG
@@ -131,17 +143,7 @@ while (counter < Math.min(items.length, max_requests)) {
       db_item["misc"],
     ]
   );
-
-  if (db_set_component.hasOwnProperty("item_id")) {
-    const query_res2 = await query(
-      `INSERT INTO set_components(
-        item_id, set_root_id, quantity)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (item_id) DO NOTHING
-        RETURNING *`,
-      [db_set_component["item_id"], db_set_component["set_root_id"], db_set_component["quantity"]]
-    );
-  }
+  
 
   counter++;
 
